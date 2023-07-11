@@ -1,8 +1,32 @@
+require("dotenv").config();
 const express = require("express");
 const logger = require("morgan");
 const cors = require("cors");
+const mongoose = require("mongoose");
 
 const contactsRouter = require("./routes/api/contacts");
+
+mongoose.connect(process.env.MONGO_URL, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+const db = mongoose.connection;
+
+db.once("open", function () {
+  console.log("Database connection successful");
+});
+
+db.on("error", function (err) {
+  console.error("Database connection error:", err);
+  process.exit(1);
+});
+
+process.on("exit", function (code) {
+  if (code === 1) {
+    console.error("Application closed with error");
+  }
+});
 
 const app = express();
 
@@ -19,7 +43,11 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  res.status(500).json({ message: err.message });
+  if (err.message === "Contact not found") {
+    res.status(404).json({ message: "Not found" });
+  } else {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = app;
