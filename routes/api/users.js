@@ -68,14 +68,9 @@ router.post("/signup", async (req, res) => {
 
     await sendVerificationEmail(req.body.email, verificationToken);
 
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-    newUser.token = token;
     await newUser.save();
 
     res.status(201).json({
-      token: newUser.token,
       user: {
         email: newUser.email,
         subscription: newUser.subscription,
@@ -115,6 +110,11 @@ router.post("/login", async (req, res) => {
     });
     user.token = token;
     await user.save();
+
+    if (!user.emailVerified) {
+      res.status(401).json({ message: "Please verify your email." });
+      return;
+    }
 
     res.status(200).json({
       token: user.token,
