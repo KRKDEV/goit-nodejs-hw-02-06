@@ -9,6 +9,10 @@ const gravatar = require("gravatar");
 const multer = require("multer");
 const jimp = require("jimp");
 const path = require("path");
+const {
+  generateVerificationToken,
+  sendVerificationEmail,
+} = require("./emailService");
 
 const userValidationSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -52,11 +56,23 @@ router.post("/signup", async (req, res) => {
       d: "mp",
     });
 
+    const verificationToken = generateVerificationToken();
+
     const newUser = await User.create({
       email: req.body.email,
       password: hashedPassword,
       avatarURL,
+      verificationToken,
+      emailVerified: false,
     });
+
+    await sendVerificationEmail(req.body.email, verificationToken);
+
+    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    newUser.token = token;
+    await newUser.save();
 
     res.status(201).json({
       token: newUser.token,
@@ -184,5 +200,58 @@ router.patch(
     }
   }
 );
+
+router.get("/verify/:verificationToken", async (req, res) => {
+  try {
+    const user = await User.findOne({
+      verificationToken: req.params.verificationToken,
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Verification token not found" });
+    }
+
+    user.verify = true;
+    user.verificationToken = null;
+    await user.save();
+
+    res.status(200).json({ message: "Email verification successful" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/verify", async (req, res) => {
+  try {
+    const { error } = Joi.object({
+      email: Joi.string().email().required(),
+    }).validate(req.body);
+    if (error) {
+      res.status(400).json({ message: error.details[0].message });
+      return;
+    }
+
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    if (user.verify) {
+      res.status(400).json({ message: "Verification has already been passed" });
+      return;
+    }
+
+    const verificationToken = generateVerificationToken();
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    await sendVerificationEmail(user.email, verificationToken);
+
+    res.status(200).json({ message: "Verification email sent" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;
