@@ -5,11 +5,30 @@ const bcrypt = require("bcryptjs");
 const User = require("../../models/usersModel");
 const authToken = require("../../authentication.js");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const multer = require("multer");
+const jimp = require("jimp");
+const path = require("path");
 
 const userValidationSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
 });
+
+const tmpDir = path.join(process.cwd(), "tmp");
+const avatarDir = path.join(process.cwd(), "public", "avatars");
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, tmpDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + ext);
+  },
+});
+
+const upload = multer({ storage });
 
 router.post("/signup", async (req, res) => {
   try {
@@ -27,15 +46,24 @@ router.post("/signup", async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(req.body.password, salt);
+    const avatarURL = gravatar.url(req.body.email, {
+      s: "200",
+      r: "pg",
+      d: "mp",
+    });
+
     const newUser = await User.create({
       email: req.body.email,
       password: hashedPassword,
+      avatarURL,
     });
 
     res.status(201).json({
+      token: newUser.token,
       user: {
         email: newUser.email,
         subscription: newUser.subscription,
+        avatarURL: newUser.avatarURL,
       },
     });
   } catch (err) {
@@ -118,5 +146,43 @@ router.get("/current", authToken, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+router.patch(
+  "/avatars",
+  authToken,
+  upload.single("avatar"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "File not provided" });
+      }
+
+      const img = await jimp.read(req.file.path);
+      await img
+        .autocrop()
+        .cover(
+          250,
+          250,
+          jimp.HORIZONTAL_ALIGN_CENTER | jimp.VERTICAL_ALIGN_MIDDLE
+        )
+        .writeAsync(req.file.path);
+
+      const user = await User.findById(req.user._id);
+
+      if (!user) {
+        return res.status(401).json({ message: "Not authorized" });
+      }
+
+      user.avatarURL = `/avatars/${req.file.filename}`;
+      await user.save();
+
+      res.status(200).json({ avatarURL: user.avatarURL });
+
+      await img.writeAsync(path.join(avatarDir, req.file.filename));
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
 
 module.exports = router;
