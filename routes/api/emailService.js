@@ -8,10 +8,9 @@ function generateVerificationToken() {
 }
 
 async function sendVerificationEmail(email, verificationToken) {
-  const serverUrl =
-    `${process.env.BASE_URL}:${process.env.APP_PORT}` ||
-    `http://localhost:${process.env.APP_PORT}`;
+  const serverUrl = "http://localhost:3000";
   const verificationLink = `${serverUrl}/api/users/verify/${verificationToken}`;
+
   const msg = {
     to: email,
     from: process.env.EMAIL_SENDER,

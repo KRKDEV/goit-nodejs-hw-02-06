@@ -203,16 +203,19 @@ router.patch(
 
 router.get("/verify/:verificationToken", async (req, res) => {
   try {
+    const { verificationToken } = req.params;
+    console.log(verificationToken);
     const user = await User.findOne({
-      verificationToken: req.params.verificationToken,
+      verificationToken: verificationToken,
     });
+    console.log(user);
 
     if (!user) {
-      return res.status(404).json({ message: "Verification token not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     user.verify = true;
-    user.verificationToken = null;
+    user.verificationToken = "null";
     await user.save();
 
     res.status(200).json({ message: "Email verification successful" });
