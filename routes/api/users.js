@@ -63,7 +63,7 @@ router.post("/signup", async (req, res) => {
       password: hashedPassword,
       avatarURL,
       verificationToken,
-      emailVerified: false,
+      verify: false,
     });
 
     await sendVerificationEmail(req.body.email, verificationToken);
@@ -111,7 +111,7 @@ router.post("/login", async (req, res) => {
     user.token = token;
     await user.save();
 
-    if (!user.emailVerified) {
+    if (!user.verify) {
       res.status(401).json({ message: "Please verify your email." });
       return;
     }
